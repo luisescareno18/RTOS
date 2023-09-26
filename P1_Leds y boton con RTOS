@@ -1,0 +1,64 @@
+#if CONFIG_FREERTOS_UNICORE
+static const BaseType_t app_cpu = 0;
+#else
+static const BaseType_t app_cpu = 1;
+#endif
+
+//Pins
+int static const LED01 = 5;
+int static const LED02 = 4;
+int static const S01 = 18;
+int status = 0;
+
+//Tarea 01: Toggle LED01
+void TareaLED01(void* parameter) {
+  while (1) {
+    status = digitalRead(S01);
+    if (status == HIGH) {
+      digitalWrite(LED01, HIGH);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      digitalWrite(LED01, LOW);
+    } else {
+      digitalWrite(LED01, HIGH);
+    }
+  }
+}
+
+//Tarea 02: Toggle LED02
+void TareaLED02(void* parameter) {
+  while (1) {
+    status = digitalRead(S01);
+    if (status == HIGH) {
+      digitalWrite(LED02, HIGH);
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+      digitalWrite(LED02, LOW);
+    } else {
+      digitalWrite(LED02, LOW);
+    }
+  }
+}
+
+void setup() {
+  pinMode(S01, INPUT);
+  pinMode(LED01, OUTPUT);
+  pinMode(LED02, OUTPUT);
+  Serial.begin(115200);
+  xTaskCreatePinnedToCore(
+    TareaLED01,  // Funcion que se manda a llamar
+    "LED 01",    // El nombre de la tarea
+    1024,        // Stack size
+    NULL,        //
+    1,           // Prioridades
+    NULL,        //
+    app_cpu);    //Core
+                 // put your setup code here, to run once:
+ 
+  xTaskCreatePinnedToCore(
+    TareaLED02,  // Funcion que se manda a llamar
+    "LED 02",    // El nombre de la tarea
+    1024,        // Stack size
+    NULL,        //
+    2,           // Prioridades
+    NULL,        //
+    app_cpu);    //Core
+ 
