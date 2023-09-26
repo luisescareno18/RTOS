@@ -1,0 +1,191 @@
+#if CONFIG_FREERTOS_UNICROE
+static const BaseType_t app_cpu = 0;
+#else
+static const BaseType_t app_cpu = 1;
+#endif
+const char msg1[]="Unidad Profesional de Ingeniería Campus Zacatecas IPN";
+const char msg2[]="1";
+const char msg3[]="2";
+const char msg4[]="3";
+const char msg5[]="4";
+const char msg6[]="5";
+const char msg7[]="6";
+static TaskHandle_t Tarea01 = NULL;
+static TaskHandle_t Tarea02 = NULL;
+static TaskHandle_t Tarea03 = NULL;
+static TaskHandle_t Tarea04 = NULL;
+static TaskHandle_t Tarea05 = NULL;
+static TaskHandle_t Tarea06 = NULL;
+static TaskHandle_t Tarea07 = NULL;
+
+//Para la tarea 1
+void Tarea1(void *parameter) {
+int msg1_len = strlen(msg1);
+while(1){
+  Serial.println();
+  for(int i=0;i<msg1_len;i++){
+    Serial.print(msg1[i]);
+  }
+  Serial.println();
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 2
+void Tarea2(void *parameter) {
+int msg2_len = strlen(msg2);
+while(1){
+  Serial.print('-');
+  for(int i=0;i<msg2_len;i++){
+    Serial.print(msg2[i]);
+  }
+  Serial.println();
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 3
+void Tarea3(void *parameter) {
+int msg3_len = strlen(msg3);
+while(1){
+  Serial.print('-');
+  for(int i=0;i<msg3_len;i++){
+    Serial.print(msg3[i]);
+  }
+  Serial.println();
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 4
+void Tarea4(void *parameter) {
+int msg4_len = strlen(msg4);
+while(1){
+  Serial.println();
+  for(int i=0;i<msg4_len;i++){
+    Serial.print(msg4[i]);
+  }
+  Serial.println();
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 5
+void Tarea5(void *parameter) {
+int msg5_len = strlen(msg5);
+while(1){
+  Serial.print('-');
+  for(int i=0;i<msg5_len;i++){
+    Serial.print(msg5[i]);
+  }
+  Serial.println();
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 6
+void Tarea6(void *parameter) {
+int msg6_len = strlen(msg6);
+while(1){
+  Serial.print('-');
+  for(int i=0;i<msg6_len;i++){
+    Serial.print(msg6[i]);
+  }
+  Serial.println();
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+ }
+}
+
+//Para la tarea 7
+void Tarea7(void *parameter) {
+int msg7_len = strlen(msg7);
+while(1){
+  Serial.print('-');
+  for(int i=0;i<msg7_len;i++){
+    Serial.print(msg7[i]);
+  }
+  Serial.println();
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+ }
+}
+
+void setup(){
+Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    // Traer función
+              Tarea1, 
+              "Tarea1",
+              1024,
+              NULL,
+              1,
+              &Tarea01,
+              app_cpu);
+  Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    //Traer función
+              Tarea2, 
+              "Tarea2", 
+              1024,
+              NULL,
+              1,
+              &Tarea02,
+              app_cpu);
+    Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    //Traer función
+              Tarea3, 
+              "Tarea3", 
+              1024,
+              NULL,
+              1,
+              &Tarea03,
+              app_cpu);
+
+    Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    // Traer función
+              Tarea4, 
+              "Tarea4",
+              1024,
+              NULL,
+              1,
+              &Tarea04,
+              app_cpu);
+    Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    //Traer función
+              Tarea5, 
+              "Tarea5", 
+              1024,
+              NULL,
+              1,
+              &Tarea05,
+              app_cpu);
+    Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    //Traer función
+              Tarea6, 
+              "Tarea6", 
+              1024,
+              NULL,
+              1,
+              &Tarea06,
+              app_cpu);
+
+    Serial.begin(300);
+  xTaskCreatePinnedToCore(
+    //Traer función
+              Tarea7, 
+              "Tarea7", 
+              1024,
+              NULL,
+              1,
+              &Tarea07,
+              app_cpu);
+}
+void loop(){
+  while(1){
+
+
+  }
+}
