@@ -1,0 +1,39 @@
+//Sistemas Operativos en tiempo real
+//Actividad 1, 2 leds a diferente periodo
+//Luis Eduardo Escareño Fernándes
+//Israel Herrera Álvarez
+
+const int ledPin1 = 2; // Pin para el primer LED
+const int ledPin2 = 3; // Pin para el segundo LED
+
+unsigned long previousMillis1 = 0; // Almacenar el tiempo del primer LED
+unsigned long previousMillis2 = 0; // Almacenar el tiempo del segundo LED
+const long interval1 = 500; // Periodo del primer LED en milisegundos
+const long interval2 = 323; // Periodo del segundo LED en milisegundos
+
+boolean ledState1 = LOW; // Estado del primer LED
+boolean ledState2 = LOW; // Estado del segundo LED
+
+void setup() {
+  pinMode(ledPin1, OUTPUT);
+  pinMode(ledPin2, OUTPUT);
+}
+
+void loop() {
+  unsigned long currentMillis = millis(); // Obtenemos el tiempo actual
+
+  // Control del primer LED
+  if (currentMillis - previousMillis1 >= interval1) {
+    previousMillis1 = currentMillis;
+    ledState1 = !ledState1; // Invertir el estado del primer LED
+    digitalWrite(ledPin1, ledState1); // Cambiar el estado del primer LED
+  }
+
+  // Control del segundo LED
+  if (currentMillis - previousMillis2 >= interval2) {
+    previousMillis2 = currentMillis;
+    ledState2 = !ledState2; // Invertir el estado del segundo LED
+    digitalWrite(ledPin2, ledState2); // Cambiar el estado del segundo LED
+  }
+}
+
