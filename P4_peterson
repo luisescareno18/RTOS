@@ -1,0 +1,83 @@
+#if CONFIG_FREERTOS_UNICROE
+static const BaseType_t app_cpu = 0;
+#else
+static const BaseType_t app_cpu = 1;
+#endif
+
+#define TRUE 1
+#define FALSE 0
+
+volatile int turno;
+volatile int want[2];
+
+void entrada_seccion_critica(int id) {
+    int otro = 1 - id;
+
+    want[id] = TRUE;
+    turno = id;
+
+    while ((want[otro] == TRUE) && (turno == id)) {
+        vTaskDelay(1); // Esperar hasta que sea el turno del otro proceso
+    }
+}
+
+void salida_seccion_critica(int id) {
+    want[id] = FALSE;
+}
+
+void Task1(void *pvParameters) {
+    while (1) {
+        entrada_seccion_critica(0);
+
+        // Sección crítica
+        Serial.println("Task1 en la sección crítica");
+
+        // Salir de la sección crítica
+        salida_seccion_critica(0);
+
+        // Sección no crítica
+        Serial.println("Task1 fuera de la sección crítica");
+
+        vTaskDelay(1000); // Simula algún trabajo en Task1
+    }
+}
+
+void Task2(void *pvParameters) {
+    while (1) {
+        entrada_seccion_critica(1);
+
+        // Sección crítica
+        Serial.println("Task2 en la sección crítica");
+
+        // Salir de la sección crítica
+        salida_seccion_critica(1);
+
+        // Sección no crítica
+        Serial.println("Task2 fuera de la sección crítica");
+
+        vTaskDelay(1000); // Simula algún trabajo en Task2
+    }
+}
+
+void setup() {
+    Serial.begin(9600);
+
+    xTaskCreate(Task1,
+     "Task1",
+      1000,
+      NULL,
+      1,
+      NULL);
+    xTaskCreate(Task2,
+     "Task2",
+      1000,
+      NULL,
+      1,
+      NULL);
+
+    vTaskStartScheduler();
+}
+
+void loop() {
+    // No deberías tener código en el loop si estás utilizando FreeRTOS
+}
