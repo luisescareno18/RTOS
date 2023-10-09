@@ -1,0 +1,59 @@
+//Actividad 1.2
+bool semaforo = false;
+
+void setup() {
+  // Inicializar la comunicación UART
+  Serial.begin(9600);
+}
+
+void loop() {
+  Tarea1();
+  Tarea2();
+  Tarea3();
+  Tarea4();
+}
+
+void Tarea1() {
+  if (!semaforo) {
+    // Sección crítica
+    semaforo = true;
+
+    // Enviar mensaje y carácter de identificación
+    Serial.print("Tarea 1 en la Sección crítica");
+    Serial.println(" (1er proceso)");
+
+    semaforo = false;
+
+    delay(1000);
+  }
+}
+
+void Tarea2() {
+  if (!semaforo) {
+    semaforo = true;
+    Serial.print("Tarea 2 - Sección crítica");
+    Serial.println(" (2do proceso)");
+    semaforo = false;
+    delay(1000);
+  }
+}
+
+void Tarea3() {
+  if (!semaforo) {
+    semaforo = true;
+    Serial.print("Tarea 3 en la Sección crítica");
+    Serial.println(" (3er proceso)");
+    semaforo = false;
+    delay(1000);
+  }
+}
+
+void Tarea4() {
+  if (!semaforo) {
+    semaforo = true;
+    Serial.print("Tarea 4 en la Sección crítica");
+    Serial.println(" (4to proceso)");
+    semaforo = false;
+    delay(1000);
+  }
+}
