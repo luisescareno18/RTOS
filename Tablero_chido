@@ -1,0 +1,59 @@
+
+  bool cajuelaAbierta = false;
+
+  while (1) {
+    if (digitalRead(BUTTON_CAJUELA_PIN) == HIGH) {
+      // El botón de la cajuela está presionado
+      cajuelaAbierta = !cajuelaAbierta;
+
+      if (cajuelaAbierta) {
+        // Encender el LED de la cajuela abierta y apagar el LED de la cajuela cerrada
+        digitalWrite(PIN_CAJUELA_ABIERTA, HIGH);
+        digitalWrite(PIN_CAJUELA_CERRADA, LOW);
+        Serial.println("LED de cajuela abierta encendido");
+      } else {
+        // Encender el LED de la cajuela cerrada y apagar el LED de la cajuela abierta
+        digitalWrite(PIN_CAJUELA_ABIERTA, LOW);
+        digitalWrite(PIN_CAJUELA_CERRADA, HIGH);
+        Serial.println("LED de cajuela cerrada encendido");
+      }
+
+      // Esperar hasta que se suelte el botón
+      while (digitalRead(BUTTON_CAJUELA_PIN) == HIGH) {
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+      }
+    }
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+}
+
+void taskBolsaAire(void *pvParameters) {
+  pinMode(LED_BOLSA_AIRE_PIN, OUTPUT);
+
+  bool bolsaAireActivada = false;
+
+  while (1) {
+    if (digitalRead(BUTTON_BOLSA_AIRE_PIN) == HIGH) {
+      // El botón de la Bolsa de Aire está presionado
+      bolsaAireActivada = !bolsaAireActivada;
+
+      if (bolsaAireActivada) {
+        // Encender el LED para indicar que la Bolsa de Aire está activada
+        digitalWrite(LED_BOLSA_AIRE_PIN, HIGH);
+        Serial.println("Bolsa de Aire activada");
+      } else {
+        // Apagar el LED para indicar que la Bolsa de Aire está desactivada
+        digitalWrite(LED_BOLSA_AIRE_PIN, LOW);
+        Serial.println("Bolsa de Aire desactivada");
+      }
+
+      // Esperar hasta que se suelte el botón
+      while (digitalRead(BUTTON_BOLSA_AIRE_PIN) == HIGH) {
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+      }
+    }
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+}
