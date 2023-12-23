@@ -1,0 +1,63 @@
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <WiFi.h>
+
+// Definiciones de configuración del WiFi
+#define WIFI_SSID "CGA2121_tNpbn4T"
+#define WIFI_PASSWORD "bJ5DFbLmBNmS9bLfBF"
+
+// Tamaño del arreglo para consumir memoria (ajusta según sea necesario)
+#define MEM_ARRAY_SIZE 100000
+
+// Prototipos de funciones
+void taskWifi(void *pvParameters);
+void taskADC(void *pvParameters);
+
+void setup() {
+  Serial.begin(115200);
+
+  // Conectar a WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Conectando a WiFi...");
+  }
+
+  // Crear tareas en núcleos separados
+  xTaskCreatePinnedToCore(taskWifi, "TaskWiFi", 10000, NULL, 1, NULL, 0); // Núcleo 0
+  xTaskCreatePinnedToCore(taskADC, "TaskADC", 10000, NULL, 1, NULL, 1);   // Núcleo 1
+}
+
+void loop() {
+  // No es necesario hacer nada en el bucle principal
+}
+
+void taskWifi(void *pvParameters) {
+  (void)pvParameters;
+
+  while (1) {
+    // Realizar operaciones con WiFi
+    Serial.println("Realizando operaciones con WiFi...");
+
+    // Consumir memoria de manera intencionada
+    int *memArray = new int[MEM_ARRAY_SIZE];
+    if (memArray == NULL) {
+      Serial.println("No se pudo asignar memoria. Deteniendo la tarea WiFi.");
+      vTaskDelete(NULL);
+    }
+
+    // Realizar operaciones adicionales (nunca se llega aquí debido a la asignación de memoria anterior)
+  }
+}
+
+void taskADC(void *pvParameters) {
+  (void)pvParameters;
+
+  while (1) {
+    // Realizar operaciones con ADC2
+    Serial.println("Realizando operaciones con ADC2...");
+
+    // Realizar operaciones adicionales
+    delay(1000); // Simular trabajo con ADC2
+  }
+}
