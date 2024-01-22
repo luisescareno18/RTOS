@@ -1,6 +1,6 @@
 //ISRAEL HERRERA ÁLVAREZ
 //LUIS EDUARDO ESCAREÑO FERNÁNDEZ
-#<if CONFIG_FREERTOS_UNICORE
+#if CONFIG_FREERTOS_UNICORE
   static const BaseType_t app_cpu = 0;
 #else
   static const BaseType_t app_cpu = 1;
@@ -142,6 +142,8 @@ void AVANZAR(void* parameter) {
       // LLANTAS LADO IZQUIERDO
       digitalWrite(IN3, LOW);
       digitalWrite(IN4, HIGH);
+      SerialBT.println("Avanza");
+
 
       if (Paro > 1) {
         // Detener motores
@@ -160,6 +162,7 @@ void AVANZAR(void* parameter) {
 
 void GIRAR(void* parameter) {
   while (1) {
+
     // Hacer take de semaforo 2 procedente de AVANZAR
     xSemaphoreTake(xSemaphore2, portMAX_DELAY);
     // Variable donde se almacenan las distancias
@@ -174,11 +177,13 @@ void GIRAR(void* parameter) {
       digitalWrite(IN2, LOW);
       digitalWrite(IN3, LOW);
       digitalWrite(IN4, HIGH);
+      SerialBT.println("gira derecha");
     } else {  // Giro a la izquierda
       digitalWrite(IN1, LOW);
       digitalWrite(IN2, HIGH);
       digitalWrite(IN3, HIGH);
       digitalWrite(IN4, LOW);
+      SerialBT.println("gira izquierda");
     }
 
     if (Paro > 1) {
