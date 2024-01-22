@@ -1,659 +1,427 @@
-/*      Proyecto Final 
-Sistemas Operativos en Tiempo Real(RTOS)
+//ISRAEL HERRERA ÁLVAREZ
+//LUIS EDUARDO ESCAREÑO FERNÁNDEZ
+#<if CONFIG_FREERTOS_UNICORE
+  static const BaseType_t app_cpu = 0;
+#else
+  static const BaseType_t app_cpu = 1;
+#endif
 
-Luis Eduardo Escareño Fernández
-Israel Herrera Álvarez
+// Librerias
+#include "Adafruit_VL53L0X.h"
+#include "BluetoothSerial.h"
 
-*
-*/
-#include <Robojax_L298N_DC_motor.h>
-#include <BluetoothSerial.h>
-#include <ESP32Servo.h>
-#include <SPI.h>
-#include <Wire.h>
-//--------- Estructura de bandera --------------------------------------
-typedef struct _vFlag
-{
-  uint8_t BTFlag = 0;
-  uint8_t L298NFlag = 0;
-  uint8_t HCSR04Flag = 1;
-  uint8_t LEDFlag = 1;
-  uint8_t ServoFlag = 0;
-  uint8_t initial_Flag = 0;
-  uint8_t FunctionFlag = 0;
-  uint8_t back_light_Flag = 0;
-  uint8_t front_light_Flag = 0;
-} vFlag;
-vFlag *flag_Ptr;
-vFlag flag;
-//---------BT--------------------
-BluetoothSerial SerialBT;
-const int lm35Pin = A7;
-//---------------servo------------------------------
-Servo myservo;  // 
-// Pines de PWM recomendados 2,4,12-19,21-23,25-27,32-33 
-#define servoPin 13
-//------LED------------------
-#define LED_BUILTIN 2
-//-------------L298---------------------------------------------------
+// Pines para motores L298
 // motor 1 ajustes
 #define IN1 16
 #define IN2 17
-#define ENA 4 // Este pin debe estar habilitado en PWM
-#define CHA 0
+#define ENA 4 
 // motor 2 ajustes
 #define IN3 18
 #define IN4 19
 #define ENB 5 // Este pin debe estar habilitado en PWM
-#define CHB 1
-const int CCW = 2; 
-const int CW  = 1; 
+int LED_WARNING = 23;
+int LED_TIEMPO=2;
+int Pote_Tiempo = 25;
+int Pote_Bateria = 34;
 
-#define motor1 1 // No cambiar
-#define motor2 2 // No cambiar
+// Pines para ultrasonicos
+int triggerD=14;
+int echoD=12;
+int triggerI=27;
+int echoI=26;
+
+int lim_frontal = 50;
+int lim_lateral = 300;
+
+// giro en delays
+int del_lim_max = 80; // delay maximo
+int del_lim_min = 1; // delay minimo
+
+// Contador de giro
+int contador_giro = 0;
 
 
-Robojax_L298N_DC_motor motor(IN1, IN2, ENA, IN2, IN3, ENB, true);
-//------Para control de bluetooth -----------------------
-#define back_light 21
-#define front_light 22
-//-----------------------Sensor hcsr04 ------------------
-#define TRIGPIN_PIN 12
-#define ECHO_PIN 14 
-long duration;
-unsigned long currentMillis = 0;
-//-----Encoder------------------
-// int encoder_pin = 2;    
-// int rpm = 0;            // Revoluciones por minuto calculadas.
-// float velocity = 0;              //Velocidad en [Km/h]
-// volatile byte pulses = 0;        // Número de pulsos leidos por el Arduino en un segundo
-// unsigned long timeold = 0;       // Tiempo 
-// unsigned int pulsesperturn = 20; // Número de muescas que tiene el disco del encoder.
-// const int wheel_diameter = 64;   // Diámetro de la rueda pequeña[mm]
-// static volatile unsigned long debounce = 0; // Tiempo del rebote.
-//----------global ------------------------
-#define MAX_DISTANCE 200
-#define MAX_SPEED 190 // Establece la velocidad de los motores de DC
-int speedSet = 0;
-int distance = 15;
-int distanceR = 10;
-int distanceL = 10;
-//--------- Estructura UART --------------------------------------
-//------------------UART------------------------------------------
-#define LINE_BUFFER_LENGTH 64
-typedef struct _vUart
-{
-  char c;
-  int lineIndex = 0;
-  int line1Index = 0;
-  int BTlineIndex = 0;
-  bool lineIsComment; 
-  bool lineSemiColon;
-  //char *line;
-  char line[128];
-  //char line1[128];
-  char BTline[20];
-  //char R_line[20];
-  //char L_line[20];
-  String inputString;
-  String BTinputString;
-  String S1inputString;
-  int V[16];
-  char ctemp[30];
-  char I2C_Data[80];
-  int DC_Spped = 50;
-  float Voltage[16];
-  int Buffer[128];
-  int StartCnt = 0;
-  int ReadCnt = 0;
-  int sensorValue = 0;
-} vUart;
-vUart *Uart_Ptr;
-vUart Uart;
-//-------------------------------------
-TaskHandle_t huart;
-TaskHandle_t hfunction;
+// setting PWM properties
+const int freq = 5000;
+const int ledChannel = 0;
+const int resolution = 8;
+int valorPote;
+int valorPWM;
 
-void vUARTTask(void *pvParameters);
-void vFunctionTask(void *pvParameters);
-//---------------------------------------------
-void initial()
-{
-  Serial.println(F("Create Task"));
-  //----------------------------------------------------------------------
-  xTaskCreatePinnedToCore(
-    vUARTTask, 
-    "UARTTask",
-    1024,
-    NULL, 
-    3,
-    &huart,
-    0);
+//Variable de Tiempo de funcionamiento
+static int Tiempo;
+static int extra;
 
-  xTaskCreatePinnedToCore(
-    vFunctionTask, 
-    "FunctionTask", 
-    1024 ,
-    NULL,
-    1,
-    &hfunction, 
-    1);
+// DETENER SISTEMA
+int Paro=0;
+int Estado=0;
+
+static float Sensores[]={0,0,0};
+int D=10;
+// Tiempos para adquirir datos de sensores ultrasonicos
+int tiempoD;
+int tiempoI;
+
+// Semaforos 
+static SemaphoreHandle_t xSemaphore1,xSemaphore2, xSemaphore3;
+//Timer Interrupcion
+static TimerHandle_t one_shot_timer = NULL;
+// Sensor VL053XL
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Comunicación Bluetooth
+String device_name = "ESP32-RTOS";
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run make menuconfig to and enable it
+#endif
+
+#if !defined(CONFIG_BT_SPP_ENABLED)
+#error Serial Bluetooth not available or not enabled. It is only available for the ESP32 chip.
+#endif
+
+BluetoothSerial SerialBT;
+
+
+//Funcion ultrasonico
+float* Distancias(){
+  // Ultrasonico derecho
+  digitalWrite(triggerD,HIGH);
+  delay(1);
+  digitalWrite(triggerD,LOW);
+  tiempoD= pulseIn(echoD,HIGH);
+  tiempoD=map(tiempoD, 0, 3047, 0, 80);
+  Sensores[1]=tiempoD/58.2;
+
+  // Ultrasonico izquierdo
+  digitalWrite(triggerI,HIGH);
+  delay(1);
+  digitalWrite(triggerI,LOW);
+  tiempoI= pulseIn(echoI,HIGH);
+  tiempoI=map(tiempoI, 0, 3047, 0, 80);
+  Sensores[2]=tiempoI/58.2;
+
+  return Sensores;
 }
 
-void Forward() 
-{  
+//Funcion para interupcion del timer 
+void myTimerCallback(TimerHandle_t xTimer) {
+
+  // Timer one shot
+  if ((uint32_t)pvTimerGetTimerID(xTimer) == 0) {
+    //Serial.println("Timer One-shot desbordado");
+    Paro=5;      
+    SerialBT.println("----------");
+    SerialBT.println("----------");
+    SerialBT.print("Suspendido"); 
+    SerialBT.println("----------");
+    SerialBT.println("----------");
+    //LLANTAS LADO DERECHO
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);    
+    //LLANTAS LADO IZQUIERDO
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+    digitalWrite(LED_TIEMPO, HIGH); 
+  }
+}
+
+void AVANZAR(void* parameter) {
+  while (1) {
+    // Hacer take de semaforo 1
+    xSemaphoreTake(xSemaphore1, portMAX_DELAY);
+    // Variable donde se almacenan las distancias
+    float *distanceX = Distancias();
+    D = (lox.readRange()) / 10;
+
+    if (D > lim_frontal) { // si la distancia es mayor al limite frontal
+      Estado = 1;
+      // Avanzar recto
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      // LLANTAS LADO IZQUIERDO
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
+
+      if (Paro > 1) {
+        // Detener motores
+        digitalWrite(IN1, LOW);
+        digitalWrite(IN2, LOW);
+        digitalWrite(IN3, LOW);
+        digitalWrite(IN4, LOW);
+      }
+      xSemaphoreGive(xSemaphore1);
+    } else {
+      // Sino hacer give del semaforo 2 para pasar a la funcion de GIRAR
+      xSemaphoreGive(xSemaphore2);
+    }
+  }
+}
+
+void GIRAR(void* parameter) {
+  while (1) {
+    // Hacer take de semaforo 2 procedente de AVANZAR
+    xSemaphoreTake(xSemaphore2, portMAX_DELAY);
+    // Variable donde se almacenan las distancias
+    float *distanceX = Distancias();
+
+    // Determinar el sentido del giro en base a las distancias medidas
+    int giro_derecha = (distanceX[1] > distanceX[2]);
+
+    // Giro a la derecha
+    if (giro_derecha) {
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
+    } else {  // Giro a la izquierda
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+    }
+
+    if (Paro > 1) {
+      // Detener motores
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, LOW);
+    }
+
+    // Definicion limites de delay para funcion random considerando las distancias de los ultrasonicos
+    if (distanceX[1] < lim_lateral && distanceX[2] < lim_lateral) {
+      del_lim_min = 20;
+      del_lim_max = 60;
+    }
+    if (distanceX[1] < lim_lateral) {  // Limites si hay algo a la derecha
+      del_lim_min = 20;
+      del_lim_max = 80;
+    }
+
+    if (distanceX[2] < lim_lateral) {  // Limites si hay algo a la izquierda
+      del_lim_min = 10;
+      del_lim_max = 60;
+    }
+
+    // Aplicacion de delay (ALEATORIO)
+    vTaskDelay((random(del_lim_min, del_lim_max)) / portTICK_PERIOD_MS);
+
+    // Aumento en uno del contador de giros
+    contador_giro = contador_giro + 1;
+
+    // Si el contador de giros
+    if (contador_giro < 10) {
+      D = (lox.readRange()) / 10;
+      // Si la distancia> Lim Front ir a  AVANZAR
+      if (D > lim_frontal) {
+        contador_giro = 0;
+        xSemaphoreGive(xSemaphore1);
+      } else {
+        xSemaphoreGive(xSemaphore2);
+      }
+    } else  // Si se supera el numero de giros se hace give del semaforo 3 que conduce a la funcion SLEEP
+    {
+      contador_giro = 0;
+      xSemaphoreGive(xSemaphore3);
+    }
+  }
+}
+
+// Tarea que se ejecuta cuando no hay salida
+void SLEEP(void*parameter){
+  while(1){
+    // Hacer take de semaforo 3 procedente de GIRAR
+    xSemaphoreTake(xSemaphore3, portMAX_DELAY);
+
+    digitalWrite(LED_WARNING, HIGH);
+    vTaskDelay(50/ portTICK_PERIOD_MS);
+
+
+//PARAMOS EL CARRITO 
+    //LLANTAS LADO DERECHO
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);    
+    //LLANTAS LADO IZQUIERDO
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+    //digitalWrite(Rmotor, LOW);
+   // digitalWrite(Lmotor, LOW);       
+
+    D=(lox.readRange())/10;
+    if(D > 20+lim_frontal) // Se hace give al semaforo 1 de la tarea AVANZAR
+    {
+      digitalWrite(LED_WARNING, LOW);
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+
+      xSemaphoreGive(xSemaphore1); 
+    }else{
+      xSemaphoreGive(xSemaphore3);
+    }
+  }
+}
+void SEND(void*parameter){
+  while(1){
+    // Variable donde se almacenan las distancias
+    float *distanceX = Distancias();
+
+    // Envio de datos por Bluetooth
+    SerialBT.print("Sensor Distancia VL53L0X: ");
+    SerialBT.println(D);
+    SerialBT.print("Ultrasonico D: "); 
+    SerialBT.println(distanceX[1]);
+    SerialBT.print("Ultrasonico I: "); 
+    SerialBT.println(distanceX[2]);
+    SerialBT.print("Nivel de bateria: "); 
+    SerialBT.println(analogRead(Pote_Bateria));   
+    SerialBT.print("Tiempo: "); 
+    SerialBT.println(Tiempo/1000);     
+    SerialBT.println("**********");
+    SerialBT.println("**********");
+
+    // Delay para que no se mande tan seguido
+    vTaskDelay((50) / portTICK_PERIOD_MS);
+
+    if(Paro>1){
+      vTaskSuspend(NULL);
+    }  
+  }  
+}
+
+void LED_Bateria(void*parameter){
+  while(1){
+  valorPote=analogRead(Pote_Bateria);
+  valorPWM = map(valorPote, 0, 4095, 0, 255);
+  ledcWrite(ledChannel, valorPWM);
+  vTaskDelay(50 / portTICK_PERIOD_MS);
+
+    if(Paro>1){
+      vTaskSuspend(NULL);
+    }  
+  }
+}
+
+void setup() {
+
+  Serial.begin(115200);
+
+  //Comunicacion Bluetooth
+  SerialBT.begin(device_name); //Bluetooth device name
+  Serial.printf("The device with name \"%s\" is started.\nNow you can pair it with Bluetooth!\n", device_name.c_str());
+
   
-  digitalWrite(IN1, LOW); 
-  digitalWrite(IN2, HIGH); 
-  analogWrite(ENA, 100);
-  digitalWrite(IN3, LOW); 
-  digitalWrite(IN4, HIGH); 
-  analogWrite(ENB, 100);
-}
+  // Para sensor VL053X
+  if (!lox.begin()) {
+    Serial.println(F("Failed to boot VL53L0X"));
+    while(1);
+  }
 
-void Reverse(){
-  //motor.rotate(motor2, 70, CW);
-  //motor.rotate(motor1, 70, CW);
-  digitalWrite(IN1, HIGH); 
-  digitalWrite(IN2, LOW); 
-  analogWrite(ENA, 100);
-  digitalWrite(IN3, HIGH); 
-  digitalWrite(IN4, LOW); 
-  analogWrite(ENB, 100);
-}
-void Left()
-{
-  //motor.rotate(motor1, 70, CW);
-  //motor.rotate(motor2, 70, CCW); //LF
-  digitalWrite(IN1, LOW); 
-  digitalWrite(IN2, HIGH); 
-  analogWrite(ENA, 100);
-}
-void Right()
-{
-  digitalWrite(IN3, LOW); 
-  digitalWrite(IN4, HIGH); 
-  analogWrite(ENB, 100);
-   //motor.rotate(motor1, 70, CCW); //RF
-  //motor.rotate(motor2, 70, CW);
-}
-void Stop() 
-{
-  motor.brake(1);
-  motor.brake(2);
-  //myservo.detach(); 
-}
-//-------------------------------------------------
-void setup() 
-{
-  Serial.begin(9600);
-  Serial.println(F("init"));
-  initial();
-  SerialBT.begin("ESP32_Luis");
-  myservo.setPeriodHertz(50);    
-  myservo.attach(servoPin, 500, 2400); 
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(TRIGPIN_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
+  
+  lox.startRangeContinuous();
+
+  //Configuracion del Pin de LED_PWM
+  ledcSetup(ledChannel, freq, resolution);
+  extra=map(analogRead(Pote_Tiempo), 0, 4095, 0, 240000);
+  Tiempo=60000+extra;
+
+
+  // Ultrasonicos
+  //Ultra derecho
+  pinMode(triggerD,OUTPUT);
+  pinMode(echoD,INPUT);
+  ////Ultra izquierdo
+  pinMode(triggerI,OUTPUT);
+  pinMode(echoI,INPUT);
+
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(back_light, OUTPUT);
-  pinMode(front_light, OUTPUT);
-  motor.begin();
-  myservo.write(90);
-//-------------------Encoder-------------------
-  // pinMode(encoder_pin, INPUT);  // Configuración del pin nº2
-  // attachInterrupt(0, counter, RISING); // Configuración de la interrupción 0, donde esta conectado. 
-  // pulses = 0;
-  // rpm = 0;
-  // timeold = 0;
-  // Serial.print("Segundos ");
-  // Serial.print("RPM ");
-  // Serial.print("Pulsos ");
-  // Serial.println("Velocidad [Km/h]");
-  //-----------------------------------------
-}
-//-----------------------------------------
-void loop() 
-{
-  int sensorValue = analogRead(lm35Pin);
-  float temperatureCelsius = (sensorValue * 5.0 / 1023.0) * 100.0;
 
-  Serial.print("Temperature: ");
-  Serial.print(temperatureCelsius);
-  Serial.println(" °C");
-  SerialBT.print("T:");
-  SerialBT.println(temperatureCelsius);
-  delay(1000);
+//  pinMode(Rmotor, OUTPUT);
+ // pinMode(Lmotor, OUTPUT);
 
-  Serial.print(F("Main at core:"));
-  Serial.println(xPortGetCoreID());
-  while(1)
-  {
-    if(flag.HCSR04Flag==1)
-    {
-      if(distance<=20)
-      {
-        // Stop();
-        // delay(10);
-        Reverse();
-        delay(250);
-        Stop();
-        delay(10);
-        flag.HCSR04Flag=2;
-        delay(500);
-        flag.HCSR04Flag=3;
-        delay(500);
-        flag.HCSR04Flag=1;
-        if ((distanceR >= distanceL) ) 
-         {
-          Left();
-          delay(70);
-          Stop();
-          delay(20);
-          flag.HCSR04Flag=1;
-        } 
-        else 
-        { 
-          Right();
-          delay(70);
-          Stop();
-          delay(20);
-          flag.HCSR04Flag=1;
-        }
-        myservo.write(90);
-        delay(500);
-      } 
-      else 
-      {
-        flag.HCSR04Flag=1;
-        Forward();
-        delay(100);
-        Stop();
-        delay(30);
-      }      
-    }
-    vTaskDelay(1);
-  }
-}
-//----------------------------------------
-void processCommand(char *data)
-{
-  int len, xlen, ylen, zlen, alen;
-  int tempDIO;
-  String stemp;
+  SerialBT.println("----------");
+  SerialBT.print("Tiempo: "); 
+  SerialBT.println(Tiempo);    
 
-  len = Uart.inputString.length();
-  //---------------------------------------
-  if (strstr(data, "VER") != NULL)
-  {
-    Serial.println(F("ESP32_20230710"));
-  }
-  //-------------- HCSR04 --------------------
-  if (strstr(data, "HCSR04_ON") != NULL)
-  {
-    flag.HCSR04Flag = 1;
-    Serial.println(F("HCSR04_ON"));
-  }
-  if (strstr(data, "HCSR04_OFF") != NULL)
-  {
-    flag.HCSR04Flag = 0;
-    Serial.println(F("HCSR04_OFF"));
-  }  
-  //----------------L298N-----------
-  if (strstr(data, "F") != NULL)
-  {
-    Serial.println(F("Forward"));
-    Forward();
-    //forward();
-    
-  }
-  if (strstr(data, "L") != NULL)
-  {
-    Serial.println(F("Left"));
-    Left();
-  }
-  if (strstr(data, "R") != NULL)
-  {
-    Serial.println(F("Right"));
-    Right();
-  }
-  if (strstr(data, "B") != NULL)
-  {
-    Serial.println(F("Reverse"));
-    Reverse();
-    //backward();
-  }
-  if (strstr(data, "S") != NULL)
-  {
-    Serial.println(F("Stop"));
-    Stop();
-  }
-  //-------------- Servo --------------------
-  if (strstr(data, "SERVO_5")!= NULL)
-  {
-    Serial.println(F("SERVO_5"));
-    myservo.write(5);
-    //myservo.detach();
-  }
-  if (strstr(data, "SERVO_10")!= NULL)
-  {
-    Serial.println(F("SERVO_10"));
-    myservo.write(10);
-  }
-  if (strstr(data, "SERVO_20")!= NULL)
-  {
-    Serial.println(F("SERVO_20"));
-    myservo.write(20);
-  }
-  if (strstr(data, "SERVO_30")!= NULL)
-  {
-    Serial.println(F("SERVO_30"));
-    myservo.write(30);
-  }
-  if (strstr(data, "SERVO_50")!= NULL)
-  {
-    Serial.println(F("SERVO_50"));
-    myservo.write(50);
-  }
-  if (strstr(data, "SERVO_80")!= NULL)
-  {
-    Serial.println(F("SERVO_80"));
-    myservo.write(80);
-  }
-  if (strstr(data, "SERVO_90")!= NULL)
-  {
-    Serial.println(F("SERVO_90"));
-    myservo.write(90);
-  }
-  if (strstr(data, "SERVO_100")!= NULL)
-  {
-    Serial.println(F("SERVO_100"));
-    myservo.write(100);
-  }
-  if (strstr(data, "SERVO_120")!= NULL)
-  {
-    Serial.println(F("SERVO_120"));
-    myservo.write(120);
-  }
-  if (strstr(data, "SERVO_140")!= NULL)
-  {
-    Serial.println(F("SERVO_140"));
-    myservo.write(140);
-  }
-  if (strstr(data, "SERVO_150")!= NULL)
-  {
-    Serial.println(F("SERVO_150"));
-    myservo.write(150);
-  }
-}
-//-----------------------------------------
-//-------------------BT-----------------
-void BTprocessCommand(String data)
-{
-  if (data =="FS")
-  {
-    Serial.println(F("Atrás"));
-    Forward();
-  }
-  if (data == "LS")
-  {
-    Serial.println(F("Izquierda"));
-    Left();
-  }
-  if (data == "RS")
-  {
-    Serial.println(F("Derecha"));
-    Right();
-  }
-  if (data == "BS")
-  {
-    Serial.println(F("Reversa"));
-    Reverse();
-  }
-  if (data == "S")
-  {
-    Serial.println(F("paro"));
-    Stop();
-  }
-  if (data == "X")
-  {
-    flag.HCSR04Flag=0;
-    Serial.println(F("Paro"));
-    Stop();
-    flag.back_light_Flag=2;
-    flag.HCSR04Flag=0;
-  }
-  if (data == "x")
-  {
-    Serial.println(F("Paro"));
-    Stop();
-    flag.back_light_Flag=0;
-    flag.HCSR04Flag=1;
-  }
-  if (data == "FGFS")
-  {
-    //LF
-    motor.rotate(motor1, 60, CCW);
-    motor.rotate(motor2, 100, CCW);
-  }
-  if (data == "FIFS")
-  {
-    //RF
-    motor.rotate(motor1, 100, CCW);
-    motor.rotate(motor2, 60, CCW);
-  }
-  if (data == "BHBS")
-  {
-    //LB
-    motor.rotate(motor1, 60, CW);
-    motor.rotate(motor2, 100, CW);
-  }
-  if (data == "BJBS")
-  {
-    //RB
-    motor.rotate(motor1, 100, CW);
-    motor.rotate(motor2, 60, CW);
-  }
-  if (data == "U")
-  {
-    //backlight
-    digitalWrite(back_light, HIGH);  
-    flag.back_light_Flag=1;
-    //Serial.println(F("light"));
-  }
-  if (data == "u")
-  {
-    //backlight
-    digitalWrite(back_light, LOW);
-    flag.back_light_Flag=0;
-    //Serial.println(F("lightoff"));
-  }
-  if (data == "W")
-  {
-    digitalWrite(front_light, HIGH);  
-    flag.front_light_Flag=1;
-    //Serial.println(F("light"));
-  }
-  if (data == "w")
-  {
-    digitalWrite(front_light, LOW);
-    flag.front_light_Flag=0;
-    //Serial.println(F("lightoff"));
-  }
-}
+  SerialBT.println("----------");
 
+  // Led para indicar que no hay salida
+  pinMode(LED_WARNING, OUTPUT);
+  pinMode(LED_TIEMPO, OUTPUT);
+  digitalWrite(LED_WARNING, LOW);
+  digitalWrite(LED_TIEMPO, LOW);
 
-//-------------------------------------------
-void vUARTTask(void *pvParameters)
-{
-  (void)pvParameters;
+  // Semaforos par avanzar y girar
+  xSemaphore1 = xSemaphoreCreateBinary();
+  xSemaphore2 = xSemaphoreCreateBinary();
 
-  Serial.print(F("UARTTask at core:"));
-  Serial.println(xPortGetCoreID());
-  for (;;)
-  {
-    while (Serial.available() > 0)
-    {
-      Uart.c = Serial.read();
+  // Semaforo para ir a tarea SLEEP porque no encontro salida el carro
+  xSemaphore3 = xSemaphoreCreateBinary();
+
+  // Le damos el semaforo a AVANZAR inicialmente
+  xSemaphoreGive(xSemaphore1);  
+
+      xTaskCreatePinnedToCore (
+              AVANZAR,    // Funcion que se manda a llamar
+              "Avanzar",    // El nombre de la tarea
+              4096,           // Stack size
+              NULL,           //
+              1,              // Prioridades
+              NULL,           //
+              app_cpu);       //Core
+  // put your setup code here, to run once:
+
+        xTaskCreatePinnedToCore (
+              GIRAR,    // Funcion que se manda a llamar
+              "Girar",    // El nombre de la tarea
+              4096,           // Stack size
+              NULL,           //
+              1,              // Prioridades
+              NULL,           //
+              app_cpu);       //Core
+  // put your setup code here, to run once:
+
+          xTaskCreatePinnedToCore (
+              SLEEP,    // Funcion que se manda a llamar
+              "Sleep",    // El nombre de la tarea
+              4096,           // Stack size
+              NULL,           //
+              1,              // Prioridades
+              NULL,           //
+              app_cpu);       //Core
+  // put your setup code here, to run once:
+
+        xTaskCreatePinnedToCore (
+              SEND,    // Funcion que se manda a llamar
+              "Send",    // El nombre de la tarea
+              4096,           // Stack size
+              NULL,           //
+              1,              // Prioridades
+              NULL,           //
+              app_cpu);       //Core
+  // put your setup code here, to run once:
+
+            xTaskCreatePinnedToCore (
+              LED_Bateria,    // Funcion que se manda a llamar
+              "LED_Bateria",    // El nombre de la tarea
+              4096,           // Stack size
+              NULL,           //
+              1,              // Prioridades
+              NULL,           //
+              app_cpu);       //Core
+  // put your setup code here, to run once:
+
+  one_shot_timer = xTimerCreate(
+                      "One-shot",           
+                      Tiempo / portTICK_PERIOD_MS,  
+                      pdFALSE,                    
+                      (void *)0,                 
+                      myTimerCallback);  
   
-      if ((Uart.c == '\n') || (Uart.c == '\r'))
-      { 
-        if (Uart.lineIndex > 0)
-        { 
-          Uart.line[Uart.lineIndex] = '\0'; 
-          //Serial.println( F("Debug") );
-          //Serial.println( Uart.inputString );
-          processCommand(Uart.line); 
-          Uart.lineIndex = 0;
-          Uart.inputString = "";
-        }
-        else
-        {
-          
-        }
-        Uart.lineIsComment = false;
-        Uart.lineSemiColon = false;
-        Serial.println(F("ok>"));
-      }
-      else
-      {
-        //Serial.println( c );
-        if ((Uart.lineIsComment) || (Uart.lineSemiColon))
-        {
-          if (Uart.c == ')')
-            Uart.lineIsComment = false; 
-        }
-        else
-        {
-          if (Uart.c == '/')
-          { 
-          }
-          else if (Uart.c == '~')
-          { 
-            Uart.lineIsComment = true;
-          }
-          else if (Uart.c == ';')
-          {
-            Uart.lineSemiColon = true;
-          }
-          else if (Uart.lineIndex >= LINE_BUFFER_LENGTH - 1)
-          {
-            Serial.println("ERROR - lineBuffer overflow");
-            Uart.lineIsComment = false;
-            Uart.lineSemiColon = false;
-          }
-          else if (Uart.c >= 'a' && Uart.c <= 'z')
-          { // Upcase lowercase
-            Uart.line[Uart.lineIndex] = Uart.c - 'a' + 'A';
-            Uart.lineIndex = Uart.lineIndex + 1;
-            Uart.inputString += (char)(Uart.c - 'a' + 'A');
-          }
-          else
-          {
-            Uart.line[Uart.lineIndex] = Uart.c;
-            Uart.lineIndex = Uart.lineIndex + 1;
-            Uart.inputString += Uart.c;
-          }
-        }
-      }
-    } //while (Serial.available() > 0)
-    while (SerialBT.available())
-    { 
-      flag.L298NFlag=1;
-      String BTdata = SerialBT.readString();
-      Stop();
-      Serial.println(BTdata);
-      BTprocessCommand(BTdata); // do something with the command
-    }//while (BT.available())
-    vTaskDelay(1);
-  }
+  xTimerStart(one_shot_timer, portMAX_DELAY);                      
 }
-void vFunctionTask(void *pvParameters)
-{
-  (void)pvParameters;
 
-  Serial.print(F("FunctionTask at core:"));
-  Serial.println(xPortGetCoreID());
-  for (;;) // A Task shall never return or exit.
-  {
-    if(flag.HCSR04Flag==1)
-    {
-      currentMillis = millis();
-      myservo.write(90);
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      delayMicroseconds(2);  
-      digitalWrite(TRIGPIN_PIN, HIGH); 
-      delayMicroseconds(10); 
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      duration= pulseIn(ECHO_PIN, HIGH);
-      distance= duration/29/2;
-      if (duration==0) 
-      {
-        Serial.println("No hay pulso del sensor");
-      }
-      else 
-      {
-        Serial.print("Distancia del ultrasónico:");
-        Serial.print(distance);
-        Serial.println("cm");
-        Serial.print(distanceR-distanceL);
-         Serial.println("cm");
-      }
-    }
-    if(flag.HCSR04Flag==2)  //lookRight
-    {
-      myservo.write(20);
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      delayMicroseconds(2);  
-      digitalWrite(TRIGPIN_PIN, HIGH); 
-      delayMicroseconds(10);  
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      duration= pulseIn(ECHO_PIN, HIGH);
-      distanceR= duration/29/2;
-      if (duration==0) 
-      {
-        Serial.println("No hay pulso del sensor");
-      }
-      else 
-      {
-        //Serial.print("Ultrasonic sensor is shown distanceR:");
-        //Serial.print(distanceR);
-        //Serial.println("cm");
-      }
-    }
-    if(flag.HCSR04Flag==3)  //lookLeft
-    {
-      myservo.write(160);
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      delayMicroseconds(2);  
-      digitalWrite(TRIGPIN_PIN, HIGH); 
-       delayMicroseconds(10);  
-      digitalWrite(TRIGPIN_PIN, LOW);  
-      duration= pulseIn(ECHO_PIN, HIGH);
-      distanceL= duration/29/2;
-      if (duration==0) 
-      {
-        Serial.println("No hay pulso del sensor");
-      }
-      else 
-      {
-        //Serial.print("Ultrasonic sensor is shown distanceL:");
-        //Serial.print(distanceL);
-        //Serial.println("cm");
-      }
-    }
-    vTaskDelay(1);
-  }
+void loop() {
 }
-//-------------------Encoder-------------------
-// void counter(){
-//   if(  digitalRead (encoder_pin) && (micros()-debounce > 500) && digitalRead (encoder_pin) ) { 
-// // Vuelve a comprobar que el encoder envia una señal buena y luego comprueba que el tiempo es superior a 1000 microsegundos y vuelve a comp//-----------------------------------------robar que la señal es correcta.
-//         debounce = micros(); // Almacena el tiempo para comprobar que no contamos el rebote que hay en la señal.
-//         pulses++;}  // Suma el pulso bueno que entra.
-// }
